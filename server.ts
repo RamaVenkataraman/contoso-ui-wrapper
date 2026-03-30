@@ -260,18 +260,10 @@ function productsWidgetHtml(): string {
     </style>
   </head>
   <body>
-    <pre id="debug" style="font-size:11px;background:#f3f4f6;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-all;margin-bottom:12px;"></pre>
     <div id="app"></div>
 
     <script>
       const app = document.getElementById("app");
-      const raw = window.openai?.toolOutput ?? {};
-
-      document.getElementById("debug").textContent = JSON.stringify({
-        hasOpenAI: !!window.openai,
-        keys: Object.keys(raw),
-        raw: raw
-      }, null, 2).slice(0, 800);
 
       function esc(value) {
         return String(value ?? "")
@@ -358,14 +350,30 @@ function productsWidgetHtml(): string {
         window.openai?.notifyIntrinsicHeight?.();
       }
 
-      const detail = getDetail(raw);
-      const products = getProducts(raw);
-
-      if (detail) {
-        renderDetail(detail);
-      } else {
-        renderProducts(products);
+      function render() {
+        const raw = window.openai?.toolOutput ?? {};
+        const detail = getDetail(raw);
+        const products = getProducts(raw);
+        if (detail) {
+          renderDetail(detail);
+        } else {
+          renderProducts(products);
+        }
       }
+
+      function waitForBridge(attempts) {
+        if (attempts <= 0) {
+          render(); // render empty state if bridge never arrives
+          return;
+        }
+        if (window.openai?.toolOutput !== undefined) {
+          render();
+        } else {
+          setTimeout(() => waitForBridge(attempts - 1), 100);
+        }
+      }
+
+      waitForBridge(30); // poll up to 3 seconds
     </script>
   </body>
 </html>`;
