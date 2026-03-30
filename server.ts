@@ -153,6 +153,7 @@ function productsWidgetHtml(): string {
         padding: 16px;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         background: transparent;
+        color: #ffffff;
       }
 
       .grid {
@@ -167,10 +168,11 @@ function productsWidgetHtml(): string {
         overflow: hidden;
         background: rgba(255,255,255,0.03);
         cursor: pointer;
+        color: #ffffff;
       }
 
       .card:hover {
-        background: rgba(255,255,255,0.05);
+        background: rgba(255,255,255,0.08);
       }
 
       .imgwrap {
