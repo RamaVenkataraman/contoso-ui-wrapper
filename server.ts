@@ -395,7 +395,10 @@ function createServer() {
       });
 
       const payload = normalizeToolPayload(result);
+      console.log("search_products raw result:", JSON.stringify(result).slice(0, 500));
+      console.log("search_products payload keys:", Object.keys(payload ?? {}));
       const products = normalizeProducts(payload);
+      console.log("search_products product count:", products.length);
 
       return {
         content: [
