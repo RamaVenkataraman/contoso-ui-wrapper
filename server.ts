@@ -350,8 +350,14 @@ function productsWidgetHtml(): string {
         window.openai?.notifyIntrinsicHeight?.();
       }
 
-      function render() {
-        const raw = window.openai?.toolOutput ?? {};
+      let rendered = false;
+
+      function render(rawOverride) {
+        if (rendered) return;
+        const raw = rawOverride ?? window.openai?.toolOutput;
+        if (!raw) return;
+        rendered = true;
+
         const detail = getDetail(raw);
         const products = getProducts(raw);
         if (detail) {
@@ -361,19 +367,31 @@ function productsWidgetHtml(): string {
         }
       }
 
-      function waitForBridge(attempts) {
-        if (attempts <= 0) {
-          render(); // render empty state if bridge never arrives
-          return;
-        }
+      // Primary: listen for postMessage from the parent frame.
+      window.addEventListener("message", (event) => {
+        const data = event.data;
+        if (!data) return;
+        // Bridge may send the tool output directly or wrapped.
+        const payload =
+          data?.toolOutput ??
+          data?.structuredContent ??
+          (data?.products ? data : null);
+        if (payload) render(payload);
+      });
+
+      // Fallback: poll for window.openai.toolOutput.
+      function poll(attempts) {
+        if (rendered) return;
         if (window.openai?.toolOutput !== undefined) {
           render();
+        } else if (attempts > 0) {
+          setTimeout(() => poll(attempts - 1), 100);
         } else {
-          setTimeout(() => waitForBridge(attempts - 1), 100);
+          renderProducts([]); // show empty state after 5s
         }
       }
 
-      waitForBridge(30); // poll up to 3 seconds
+      poll(50); // up to 5 seconds
     </script>
   </body>
 </html>`;
