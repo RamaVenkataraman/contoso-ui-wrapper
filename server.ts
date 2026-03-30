@@ -260,11 +260,18 @@ function productsWidgetHtml(): string {
     </style>
   </head>
   <body>
+    <pre id="debug" style="font-size:11px;background:#f3f4f6;padding:10px;border-radius:8px;white-space:pre-wrap;word-break:break-all;margin-bottom:12px;"></pre>
     <div id="app"></div>
 
     <script>
       const app = document.getElementById("app");
       const raw = window.openai?.toolOutput ?? {};
+
+      document.getElementById("debug").textContent = JSON.stringify({
+        hasOpenAI: !!window.openai,
+        keys: Object.keys(raw),
+        raw: raw
+      }, null, 2).slice(0, 800);
 
       function esc(value) {
         return String(value ?? "")
