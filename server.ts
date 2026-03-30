@@ -588,6 +588,22 @@ app.all("/mcp", async (req, res) => {
   }
 });
 
+app.get("/.well-known/oauth-protected-resource", async (_req, res) => {
+  try {
+    const upstream = "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/.well-known/oauth-protected-resource/ecommerce/mcp";
+    const response = await fetch(upstream);
+    if (!response.ok) {
+      res.status(response.status).end();
+      return;
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error("PRM proxy failed:", err);
+    res.status(502).json({ error: "Failed to fetch PRM from upstream" });
+  }
+});
+
 app.get("/", (_req, res) => {
   res.send("Contoso UI wrapper is running.");
 });
