@@ -13,7 +13,7 @@ import { z } from "zod";
 const PORT = Number(process.env.PORT || 3000);
 const CHANNEL_ID = 68719478279;
 const CONTOSO_MCP_URL =
-  "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/ecommerce/mcp";
+  "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/mcp";
 
 // ------------------------
 // Upstream Contoso MCP client
@@ -590,7 +590,7 @@ app.all("/mcp", async (req, res) => {
 
 app.get("/.well-known/oauth-protected-resource", async (_req, res) => {
   try {
-    const upstream = "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/.well-known/oauth-protected-resource/ecommerce/mcp";
+    const upstream = "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/.well-known/oauth-protected-resource/mcp";
     const response = await fetch(upstream);
     if (!response.ok) {
       res.status(response.status).end();
