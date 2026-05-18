@@ -17,6 +17,12 @@ const CONTOSO_MCP_URL =
 
 const CUSTOM_WRAPPED = new Set(["search_products", "get_product_by_id"]);
 
+// Upstream tool name → the wrapper name we expose (custom renames go here)
+const CUSTOM_NAME_MAP: Record<string, string> = {
+  search_products:   "search_products_ui",
+  get_product_by_id: "get_product_details_ui",
+};
+
 let upstreamTools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
 
 async function initUpstreamTools(): Promise<void> {
@@ -414,6 +420,30 @@ function productsWidgetHtml(): string {
 }
 
 // ------------------------
+// Tool-name rewriting (upstream names → wrapper names in descriptions)
+// ------------------------
+
+function buildNameMap(): Record<string, string> {
+  const map: Record<string, string> = { ...CUSTOM_NAME_MAP };
+  for (const tool of upstreamTools) {
+    if (!(tool.name in map)) {
+      map[tool.name] = `${tool.name}_ui`;
+    }
+  }
+  return map;
+}
+
+function rewriteToolRefs(text: string, nameMap: Record<string, string>): string {
+  let result = text;
+  for (const [from, to] of Object.entries(nameMap)) {
+    // Match whole tool names only — not substrings of longer identifiers
+    const re = new RegExp(`(?<![a-zA-Z0-9_])${from}(?![a-zA-Z0-9_])`, "g");
+    result = result.replace(re, to);
+  }
+  return result;
+}
+
+// ------------------------
 // JSON Schema → Zod (for dynamic passthrough wrappers)
 // ------------------------
 
@@ -542,17 +572,20 @@ function createServer() {
     }
   );
 
+  const nameMap = buildNameMap();
+
   for (const tool of upstreamTools) {
     if (CUSTOM_WRAPPED.has(tool.name)) continue;
 
     const upstreamName = tool.name;
     const schema = jsonSchemaPropsToZod(tool.inputSchema);
+    const rawDescription = tool.description ?? `Call ${upstreamName} on the Contoso backend`;
 
     server.registerTool(
       `${upstreamName}_ui`,
       {
         title: tool.title ?? upstreamName,
-        description: tool.description ?? `Call ${upstreamName} on the Contoso backend`,
+        description: rewriteToolRefs(rawDescription, nameMap),
         inputSchema: schema,
       },
       async (args: Record<string, unknown>) => {
