@@ -15,6 +15,20 @@ const CHANNEL_ID = 68719478279;
 const CONTOSO_MCP_URL =
   "https://scuz40cmfbe23882394-rs.su.retail.test.dynamics.com/mcp";
 
+const CUSTOM_WRAPPED = new Set(["search_products", "get_product_by_id"]);
+
+let upstreamTools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
+
+async function initUpstreamTools(): Promise<void> {
+  const client = await getContosoClient();
+  const { tools } = await client.listTools();
+  upstreamTools = tools;
+  console.log(
+    `Discovered ${tools.length} upstream tools:`,
+    tools.map((t: { name: string }) => t.name).join(", ")
+  );
+}
+
 // ------------------------
 // Upstream Contoso MCP client
 // ------------------------
@@ -400,6 +414,45 @@ function productsWidgetHtml(): string {
 }
 
 // ------------------------
+// JSON Schema → Zod (for dynamic passthrough wrappers)
+// ------------------------
+
+function jsonSchemaPropsToZod(inputSchema: unknown): z.ZodObject<z.ZodRawShape> {
+  const schema = inputSchema as Record<string, unknown> | undefined;
+  const properties = schema?.properties as Record<string, Record<string, unknown>> | undefined;
+
+  if (!properties) return z.object({});
+
+  const required = new Set<string>((schema?.required as string[]) ?? []);
+  const shape: z.ZodRawShape = {};
+
+  for (const [key, prop] of Object.entries(properties)) {
+    if (key === "channelId") continue;
+
+    let field: z.ZodTypeAny;
+    switch (prop["type"]) {
+      case "integer":
+      case "number":  field = z.number(); break;
+      case "boolean": field = z.boolean(); break;
+      case "array":   field = z.array(z.unknown()); break;
+      case "object":  field = z.record(z.string(), z.unknown()); break;
+      default:        field = z.string(); break;
+    }
+
+    if (typeof prop["description"] === "string") {
+      field = field.describe(prop["description"]);
+    }
+    if (!required.has(key)) {
+      field = field.optional();
+    }
+
+    shape[key] = field;
+  }
+
+  return z.object(shape);
+}
+
+// ------------------------
 // Per-session MCP server
 // ------------------------
 
@@ -488,6 +541,38 @@ function createServer() {
       };
     }
   );
+
+  for (const tool of upstreamTools) {
+    if (CUSTOM_WRAPPED.has(tool.name)) continue;
+
+    const upstreamName = tool.name;
+    const schema = jsonSchemaPropsToZod(tool.inputSchema);
+
+    server.registerTool(
+      `${upstreamName}_ui`,
+      {
+        title: tool.title ?? upstreamName,
+        description: tool.description ?? `Call ${upstreamName} on the Contoso backend`,
+        inputSchema: schema,
+      },
+      async (args: Record<string, unknown>) => {
+        const result = await callContosoTool(upstreamName, {
+          ...args,
+          channelId: CHANNEL_ID,
+        });
+
+        const payload = normalizeToolPayload(result);
+        const text =
+          payload && typeof payload === "object"
+            ? JSON.stringify(payload, null, 2)
+            : String(payload ?? "No result.");
+
+        return {
+          content: [{ type: "text", text }],
+        };
+      }
+    );
+  }
 
   server.registerResource(
     "html",
@@ -608,6 +693,13 @@ app.get("/", (_req, res) => {
   res.send("Contoso UI wrapper is running.");
 });
 
-app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
-});
+initUpstreamTools()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialize upstream tools:", err);
+    process.exit(1);
+  });
