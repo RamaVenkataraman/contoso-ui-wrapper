@@ -566,7 +566,8 @@ function createServer() {
           },
         ],
         structuredContent: {
-          product,
+          ...payload,  // full upstream data (variants, dimensions, etc.) passes through
+          product,     // normalized shape for the UI widget
         },
       };
     }
