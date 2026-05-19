@@ -60,11 +60,16 @@ async function callContosoTool(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<any> {
-  const client = await getContosoClient();
-  return client.callTool({
-    name: toolName,
-    arguments: args,
-  });
+  try {
+    const client = await getContosoClient();
+    return await client.callTool({ name: toolName, arguments: args });
+  } catch (err) {
+    // Upstream session may have expired — drop the cached client and retry once
+    console.warn(`callContosoTool(${toolName}) failed, reconnecting:`, err);
+    contosoClient = null;
+    const client = await getContosoClient();
+    return await client.callTool({ name: toolName, arguments: args });
+  }
 }
 
 // ------------------------
