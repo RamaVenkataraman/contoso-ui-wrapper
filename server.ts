@@ -589,19 +589,10 @@ function createServer() {
         inputSchema: schema,
       },
       async (args: Record<string, unknown>) => {
-        const result = await callContosoTool(upstreamName, {
+        return callContosoTool(upstreamName, {
           ...args,
           channelId: CHANNEL_ID,
         });
-
-        const payload = normalizeToolPayload(result);
-        const structured = payload && typeof payload === "object" ? payload : { result: payload };
-        const text = JSON.stringify(structured, null, 2);
-
-        return {
-          content: [{ type: "text", text }],
-          structuredContent: structured,
-        };
       }
     );
   }
