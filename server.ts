@@ -26,7 +26,7 @@ const CUSTOM_NAME_MAP: Record<string, string> = {
 let upstreamTools: Awaited<ReturnType<Client["listTools"]>>["tools"] = [];
 
 async function initUpstreamTools(): Promise<void> {
-  const client = await getContosoClient();
+  const client = await getContosoClient(undefined);
   const { tools } = await client.listTools();
   upstreamTools = tools;
   console.log(
@@ -39,35 +39,37 @@ async function initUpstreamTools(): Promise<void> {
 // Upstream Contoso MCP client
 // ------------------------
 
-let contosoClient: Client | null = null;
+// Keyed by auth header value (empty string = unauthenticated)
+const contosoClients = new Map<string, Client>();
 
-async function getContosoClient(): Promise<Client> {
-  if (contosoClient) return contosoClient;
+async function getContosoClient(authHeader?: string): Promise<Client> {
+  const key = authHeader ?? "";
+  const existing = contosoClients.get(key);
+  if (existing) return existing;
 
-  const client = new Client({
-    name: "contoso-ui-wrapper",
-    version: "1.0.0",
+  const client = new Client({ name: "contoso-ui-wrapper", version: "1.0.0" });
+  const transport = new StreamableHTTPClientTransport(new URL(CONTOSO_MCP_URL), {
+    requestInit: authHeader ? { headers: { authorization: authHeader } } : undefined,
   });
-
-  const transport = new StreamableHTTPClientTransport(new URL(CONTOSO_MCP_URL));
   await client.connect(transport);
 
-  contosoClient = client;
+  contosoClients.set(key, client);
   return client;
 }
 
 async function callContosoTool(
   toolName: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  authHeader?: string
 ): Promise<any> {
   try {
-    const client = await getContosoClient();
+    const client = await getContosoClient(authHeader);
     return await client.callTool({ name: toolName, arguments: args });
   } catch (err) {
     // Upstream session may have expired — drop the cached client and retry once
     console.warn(`callContosoTool(${toolName}) failed, reconnecting:`, err);
-    contosoClient = null;
-    const client = await getContosoClient();
+    contosoClients.delete(authHeader ?? "");
+    const client = await getContosoClient(authHeader);
     return await client.callTool({ name: toolName, arguments: args });
   }
 }
@@ -491,7 +493,7 @@ function jsonSchemaPropsToZod(inputSchema: unknown): z.ZodObject<z.ZodRawShape> 
 // Per-session MCP server
 // ------------------------
 
-function createServer() {
+function createServer(authHeader?: string) {
   const server = new McpServer({
     name: "contoso-shopping-ui-wrapper",
     version: "1.0.0",
@@ -515,7 +517,7 @@ function createServer() {
       const result = await callContosoTool("search_products", {
         searchTerm: query,
         channelId: CHANNEL_ID,
-      });
+      }, authHeader);
 
       const payload = normalizeToolPayload(result);
       console.log("search_products raw result:", JSON.stringify(result).slice(0, 500));
@@ -558,7 +560,7 @@ function createServer() {
       const result = await callContosoTool("get_product_by_id", {
         productId,
         channelId: CHANNEL_ID,
-      });
+      }, authHeader);
 
       const payload = normalizeToolPayload(result);
       const product = normalizeProductDetail(payload);
@@ -598,7 +600,7 @@ function createServer() {
         return callContosoTool(upstreamName, {
           ...args,
           channelId: CHANNEL_ID,
-        });
+        }, authHeader);
       }
     );
   }
@@ -636,8 +638,8 @@ function createServer() {
 
 const transports = new Map<string, StreamableHTTPServerTransport>();
 
-async function createTransport() {
-  const server = createServer();
+async function createTransport(authHeader?: string) {
+  const server = createServer(authHeader);
 
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: () => crypto.randomUUID(),
@@ -665,7 +667,8 @@ async function getTransport(req: express.Request) {
     if (existing) return existing;
   }
 
-  return await createTransport();
+  const authHeader = req.header("authorization");
+  return await createTransport(authHeader);
 }
 
 // ------------------------
