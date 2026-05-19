@@ -595,13 +595,12 @@ function createServer() {
         });
 
         const payload = normalizeToolPayload(result);
-        const text =
-          payload && typeof payload === "object"
-            ? JSON.stringify(payload, null, 2)
-            : String(payload ?? "No result.");
+        const structured = payload && typeof payload === "object" ? payload : { result: payload };
+        const text = JSON.stringify(structured, null, 2);
 
         return {
           content: [{ type: "text", text }],
+          structuredContent: structured,
         };
       }
     );
